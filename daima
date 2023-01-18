@@ -1,0 +1,151 @@
+#模型转换
+!tree ./model
+
+#初始化
+import sys
+import os
+from IPython.core.interactiveshell import InteractiveShell
+InteractiveShell.ast_node_interactivity = "all" 
+
+home_path = !echo ${HOME}
+sys.path.append(os.path.join(home_path[0] , "jupyter-notebook/"))
+print('System init success.')
+
+# atlas_utils是本团队基于pyACL封装好的一套工具库，如果您也想引用的话，请首先将
+# https://gitee.com/ascend/samples/tree/master/python/common/atlas_utils
+# 这个路径下的代码引入您的工程中
+from atlas_utils.acl_resource import AclResource
+from constants import *
+from acl_model import Model
+
+#创建一个AclResource类的实例
+acl_resource = AclResource()
+#AscendCL资源初始化（封装版本）
+acl_resource.init()
+
+# 上方“init”方法具体实现（仅供参考），请阅读“init()”方法，观察初始化和运行时资源申请的详细操作步骤
+def init(self):
+    """
+    Init resource
+    """
+    print("init resource stage:")
+    ret = acl.init()
+    utils.check_ret("acl.init", ret)
+
+    #指定用于运算的Device
+    ret = acl.rt.set_device(self.device_id)
+    utils.check_ret("acl.rt.set_device", ret)
+    print("Set device n success.")
+
+    #显式创建一个Context
+    self.context, ret = acl.rt.create_context(self.device_id)
+    utils.check_ret("acl.rt.create_context", ret)
+
+    #创建一个Stream
+    self.stream, ret = acl.rt.create_stream()
+    utils.check_ret("acl.rt.create_stream", ret)
+
+    #获取当前昇腾AI软件栈的运行模式
+    #0：ACL_DEVICE，表示运行在Device的Control CPU上或开发者版上
+    #1：ACL_HOST，表示运行在Host CPU上
+    self.run_mode, ret = acl.rt.get_run_mode()
+    utils.check_ret("acl.rt.get_run_mode", ret)
+
+    print("Init resource success")
+
+#请阅读下方代码，观察释放运行时资源的详细操作步骤
+def __del__(self):
+    print("acl resource release all resource")
+    resource_list.destroy()
+    
+    #调用acl.rt.destroy_stream接口释放Stream
+    if self.stream:
+        acl.rt.destroy_stream(self.stream)
+        print("acl resource release stream")
+        
+    #调用acl.rt.destroy_context接口释放Context
+    if self.context:
+        acl.rt.destroy_context(self.context)
+        print("acl resource release context")
+    
+    #调用acl.rt.destroy_context接口释放Context
+    acl.rt.reset_device(self.device_id)
+    acl.finalize()
+    print("Release acl resource success")
+    
+    
+#从文件加载离线模型数据
+model_path = './model/deeplabv3_plus.om'
+model = Model(model_path)
+
+#原始图片
+import sys
+import os
+import numpy as np
+import cv2 as cv
+from PIL import Image
+
+MODEL_WIDTH = 513
+MODEL_HEIGHT = 513
+
+#图片路径
+image_dir = './deeplabv3_pascal_data/'
+
+IMG_EXT = ['.jpg', '.JPG', '.png', '.PNG', '.bmp', '.BMP', '.jpeg', '.JPEG']
+images_list = [os.path.join(image_dir,img)for img in os.listdir(image_dir)if os.path.splitext(img)[1] in IMG_EXT]
+images_list
+Image.open(images_list[0])
+type(images_list[0])
+
+
+#预处理
+#1. 读取图片
+bgr_img = cv.imread(images_list[0])
+
+#2. 得到图片shape
+orig_shape = bgr_img.shape[:2]
+print("Shape of original image：",bgr_img.shape)
+
+#3.对图片进行resize，缩放至模型要求的宽高：
+img = cv.resize(bgr_img, (MODEL_WIDTH, MODEL_HEIGHT))
+print("The size of the model to be entered：",img.shape)
+
+#保存并展示resize之后的图片
+if not os.path.isdir('./outputs'):
+   os.mkdir('./outputs')
+output_path = os.path.join("./outputs", "out_" + os.path.basename(images_list[0]))
+cv.imwrite(output_path, img)
+Image.open(output_path)
+img = img.astype(np.int8)
+if not img.flags['C_CONTIGUOUS']:
+        img = np.ascontiguousarray(img)
+img.shape
+img.nbytes
+
+#执行推理
+#根据构建好的模型输入数据进行模型推理
+result_list = model.execute([img])
+print(result_list)
+
+#解析模型推理结果
+#1. 得到推理结果并且reshape成513*513，并且转换成uint8类型
+result_img = result_list[0].reshape(513, 513)
+result_img = result_img.astype('uint8')
+result_img.shape
+
+cv.imwrite(output_path, result_img)
+Image.open(output_path)
+
+#2. 多通道图像融合
+img = cv.merge((result_img, result_img, result_img))
+print("Multi channel merged shape：",img.shape)
+
+#3. 将融合后的图像resize成原始图片的大小
+bgr_img = cv.resize(img, (orig_shape[1], orig_shape[0]))
+print("Shape of the original image size that is resized:",bgr_img.shape)
+bgr_img = (bgr_img * 255)
+
+#保存图片
+cv.imwrite(output_path, bgr_img)
+Image.open(output_path)
+
