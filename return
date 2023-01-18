@@ -1,0 +1,22 @@
+['./deeplabv3_pascal_data/girl.jpg',
+ './deeplabv3_pascal_data/dog.jpg',
+ './deeplabv3_pascal_data/cat.jpg']
+
+(513, 513, 3)
+789507
+
+[array([[[0., 0., 0., ..., 0., 0., 0.],
+        [0., 0., 0., ..., 0., 0., 0.],
+        [0., 0., 0., ..., 0., 0., 0.],
+        ...,
+        [0., 0., 0., ..., 0., 0., 0.],
+        [0., 0., 0., ..., 0., 0., 0.],
+        [0., 0., 0., ..., 0., 0., 0.]]], dtype=float32)]
+        
+        
+(513, 513)
+True
+
+Multi channel merged shape： (513, 513, 3)
+Shape of the original image size that is resized: (900, 1350, 3)
+True
